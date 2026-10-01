@@ -1,9 +1,18 @@
-av
-ctranslate2>=3.17,<4
-huggingface_hub>=0.13
-tokenizers
+# 本文件中的版本已在 Python 3.12 的 venv 下实际验证通过（可加载模型并完成一次转写）。
+# 相比早期版本的调整原因：
+#   av / tokenizers  旧版 av==10.* 与 tokenizers==0.13.* 没有 cp312 预编译包，需现场编译，故放宽到有轮子的版本
+#   huggingface_hub  1.x 移除了 utils.py 使用的 local_dir_use_symlinks 参数，因此锁在 0.22.x
+#   numpy            必须 <2，ctranslate2 3.24 是按 numpy 1.x 的 ABI 编译的
+#   setuptools       必须 <81，ctranslate2 3.24 依赖 pkg_resources，setuptools 81 起已将其移除
+#   onnxruntime      vad_filter=True 时必需；模型文件 assets/silero_vad.onnx 已随仓库提供
+av==12.3.0
+ctranslate2==3.24.0
+huggingface_hub==0.22.2
+tokenizers==0.15.2
+numpy<2
+onnxruntime==1.30.0
 pysondb==1.6.2
 flask==3.0.0
 flask-cors==4.0.0
-onnxruntime
-requests
+requests==2.34.2
+setuptools<81
