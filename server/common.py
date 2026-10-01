@@ -71,6 +71,12 @@ def saveToken(token:str):
 def getWorkerName()->str:
     return os.environ.get("WORKER_NAME", "default_worker")
 
+# 转译结果是否额外在本地保留一份 lrc 文件
+# 关闭时（默认）只把字幕内容上传给 kikoeru 服务器，本地不落盘
+def getSaveLrcFile()->bool:
+    s = os.environ.get("SAVE_LRC_FILE", "").strip().lower()
+    return s in ("1", "true", "yes", "on")
+
 # 调用model.transcribe传入的可选参数
 def getTrancribeParams()->object:
     # # phanton version

@@ -17,6 +17,7 @@ kikoeru_url = common.getKikoeruUrl()
 kikoeru_user = common.getKikoeruUser()
 kikoeru_password = common.getKikoeruPassword()
 transcribe_params = common.getTrancribeParams()
+save_lrc_file = common.getSaveLrcFile()
 is_need_auth = False
 model: WhisperModel = None
 
@@ -162,7 +163,42 @@ def transcribe_audio(audio_path:str)->str:
         )
     )
 
-def checkTaskIsOwnByMe(task:Dict)->bool:
+INVALID_FILENAME_CHARS = '<>:"/\\|?*'
+
+# 音频文件名来自服务器上的真实文件，可能含有 Windows 不允许的字符
+def sanitizeFileName(name:str)->str:
+    for c in INVALID_FILENAME_CHARS:
+        name = name.replace(c, "_")
+    return name.strip().rstrip(".")  # Windows 下文件名结尾不能是空格或点
+
+# 服务器用 RJ + 补零后的 work_id 表示音声编号，与 kikoeru-express 的 formatID 保持一致
+def formatWorkCode(work_id:int)->str:
+    n = int(work_id)
+    if n >= 1000000:
+        return "RJ" + ("0" + str(n))[-8:]
+    return "RJ" + ("000000" + str(n))[-6:]
+
+# 本地留存的字幕文件路径：OUTPUT_PATH/RJ号/音频文件名.lrc
+# 服务器没有返回作品信息时（老版本服务端），退化成 OUTPUT_PATH/任务id.lrc
+def buildLrcPath(task:Dict)->str:
+    output_dir = common.getOutputDir()
+    work_id = task.get("work_id")
+    audio_stem = sanitizeFileName(os.path.splitext(os.path.basename(task.get("audio_path") or ""))[0])
+    if not work_id or audio_stem == "":
+        return os.path.join(output_dir, f"{task['id']}.lrc")
+    return os.path.join(output_dir, formatWorkCode(work_id), f"{audio_stem}.lrc")
+
+# 把转译结果额外写一份到本地磁盘，便于事后排查或者重复使用
+def saveLrcFile(task:Dict, lrc_content:str):
+    output_lrc_path = buildLrcPath(task)
+    os.makedirs(os.path.dirname(output_lrc_path), exist_ok=True)
+    with open(output_lrc_path, "w", encoding="utf8") as f:
+        f.write(lrc_content)
+    print("字幕文件已保存到：", output_lrc_path)
+
+# 检查任务是否还归属于自己（没有被删除、没有被重新分配给别的worker），
+# 返回服务器上的任务详情（含 work_id / audio_path），任务已失效时返回 None
+def fetchOwnTaskDetail(task:Dict)->Dict:
     try:
         r = session.get(f"{kikoeru_url}/api/lyric/translate/get", params={
             "id": task["id"],
@@ -171,9 +207,9 @@ def checkTaskIsOwnByMe(task:Dict)->bool:
         if r.status_code == 200:
             data = r.json()
             print("get task status, data = ", data)
-            return 'task' in data
+            return data.get("task") or None
         else:
-            return False
+            return None
     except Exception as e:
         print("检查任务状态失败：", e)
         raise e
@@ -185,7 +221,8 @@ def processTask(task):
     saveTaskToFile(task)
 
     # 处理前，获取一次任务状态，如果任务被删除了的话，则不处理，直接返回
-    if not checkTaskIsOwnByMe(task):
+    detail = fetchOwnTaskDetail(task)
+    if detail is None:
         print("服务器上的翻译任务已被删除，或者已经被重新启动翻译进程，跳过当前任务")
         os.unlink(task_file_path)
 
@@ -193,6 +230,11 @@ def processTask(task):
             print("删除本地音频文件")
             os.unlink(os.path.join(input_audio_dir, task['audio_file_name']))
         return
+
+    # 记下服务器侧的作品/音频信息，本地字幕文件按 RJ号/音频文件名.lrc 命名
+    task['work_id'] = detail.get("work_id")
+    task['audio_path'] = detail.get("audio_path")
+    saveTaskToFile(task)
 
     if 'audio_file_name' not in task:
         print("下载音频文件")
@@ -221,6 +263,13 @@ def processTask(task):
         print("transcripting error, ", e)
         success = False
         
+    # 上传前先存一份本地副本，这样即使上传失败也不会丢掉转译结果
+    if success and save_lrc_file:
+        try:
+            saveLrcFile(task, lrc_content)
+        except Exception as e:
+            print("保存本地字幕文件失败（不影响上传）：", e)
+
     finishTask(task, success, lrc_content)
 
     print(" 任务完成，删除本地记录")

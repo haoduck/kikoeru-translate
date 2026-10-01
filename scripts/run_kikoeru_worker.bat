@@ -22,6 +22,14 @@ set DB_PATH=%CONFIG_DIR%\db
 :: 音频存储目录，其中的音频文件在完成后会被删除
 set INPUT_PATH=%CONFIG_DIR%\input 
 
+:: 字幕输出目录，长期存储，不删除，仅当 SAVE_LRC_FILE 开启时使用
+:: 文件按 <RJ号>/<音频文件名>.lrc 存放，拿不到作品信息时退化为 <任务id>.lrc
+set OUTPUT_PATH=%CONFIG_DIR%\output
+
+:: 是否在本地保留转译得到的 .lrc 字幕文件，可选：true/false
+:: 为 false 时只把字幕内容上传给 kikoeru 服务器，本地不落盘
+set SAVE_LRC_FILE=false
+
 :: 只读文件夹，模型存放路径，文件夹类似这个样子: ./model/model.bin
 set MODEL_PATH=%CONFIG_DIR%\model
 
