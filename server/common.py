@@ -95,7 +95,7 @@ def getTrancribeParams()->object:
     params = default
     try:
         s = os.environ.get("TRANSCRIBE_PARAMS", "")
-        if s is not "":
+        if s != "":
             params = json.loads(s)
     except:
         print("get transcribe params failed, fallback to ", default)
